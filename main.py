@@ -29,6 +29,28 @@ dial_one_volume_memory = 0
 dial_two_mute = False
 dial_three_mute = False
 """
+
+# TODO: move this to a config.json
+program_zero = {
+    "name": "Spotify",
+    "id": "spotify"
+}
+
+programOne = {
+    "name": "Feishin",
+    "id": "Chromium"
+}
+
+programTwo = {
+    "name": "Minecraft",
+    "id": "java"
+}
+
+programThree = {
+    "name": "N/A",
+    "id": "n/a"
+}
+
 #
 # =======================================
 
@@ -55,12 +77,14 @@ img.save(img_byte_arr, format='JPEG')
 img_pressed_bytes = img_byte_arr.getvalue()
 
 
+"""
+# don't need this for now
 # callback when buttons are pressed or released
 def key_change_callback(deck, key, key_state):
     print("Key: " + str(key) + " state: " + str(key_state))
 
     deck.set_key_image(key, img_pressed_bytes if key_state else img_released_bytes)
-
+"""
 
 # callback when dials are pressed or released
 def dial_change_callback(deck, dial, event, value):
@@ -85,8 +109,9 @@ def dial_change_callback(deck, dial, event, value):
             img_byte_arr = img_byte_arr.getvalue()
 
             deck.set_touchscreen_image(img_byte_arr, 0, 0, 800, 100)
+
     elif event == DialEventType.TURN:
-        print(f"dial {dial} turned: {value}")
+        #print(f"dial {dial} turned: {value}")
 
         # change volume by +/-2% at a time
         if value < 0:
@@ -94,89 +119,45 @@ def dial_change_callback(deck, dial, event, value):
         else:
             value = 2
 
-        # Firefox volume control
+
+        # Volume control program zero
+        # TODO: break this out into a function that takes to dial number as a parameter and adjusts the volume of the corresponding program according to the dict above
         if dial == 0:
             
             # run "wpctl status" and return its output
             wpctl_shell_out = subprocess.run(["wpctl", "status"], stdout=subprocess.PIPE)
             wpctl_string = wpctl_shell_out.stdout.decode("utf-8")
 
-            # find the line with Firefox's stream id
+            # find the line with the program's id
             for line in wpctl_string.split("\n"):
-                if "Firefox" in line and not "pid:" in line:
-                    # remove whitespace before id and remove chars after id
-                    id = line[8:].split(".")[0]
-                    print(id)
+                if program_zero["id"] in line and not "pid:" in line:
 
-                    wpctl_shell_out1 = subprocess.run(["wpctl", "get-volume", id], stdout=subprocess.PIPE)
-                    firefox_volume = float(wpctl_shell_out1.stdout.decode("utf-8")[8:])*100
-                    print(f"Current Firefox volume: {firefox_volume}")
+                    # extract the digits from the line
+                    shell_list = list(line)
+                    for i in shell_list:
+                        if i == " ":
+                            shell_list.remove(i)
+                    node_id = "".join(shell_list).split(".")[0]
 
-                    firefox_volume = firefox_volume + float(value)
-                    if firefox_volume > 100 or firefox_volume < 0:
-                        print("you idiot")
+                    # get current app volume
+                    wpctl_shell_out1 = subprocess.run(["wpctl", "get-volume", node_id], stdout=subprocess.PIPE)
+                    p_z_volume = float(wpctl_shell_out1.stdout.decode("utf-8")[8:])*100
+                    
+                    if p_z_volume + float(value) > 100: 
+                        print("Cannot set volume to higher than 100.")
+                    elif p_z_volume + float(value) < 0:
+                        print("Cannot set volume to below 0.")
                     else:
-                        feedback = subprocess.run(["wpctl", "set-volume", id, f"{str(firefox_volume)}%"], stdout=subprocess.PIPE)
-                        e = feedback.stdout.decode("utf-8")
+                        p_z_volume = p_z_volume + float(value)
+                        subprocess.run(["wpctl", "set-volume", node_id, f"{str(p_z_volume)}%"], stdout=subprocess.PIPE)
+                        print(f"Set {program_zero["name"]} volume to {p_z_volume}. [Pipewire Node ID: {node_id}]")
 
-                        print(e)
 
-        # spotify volume control
-        elif dial == 1:
-            
-            # run "wpctl status" and return its output
-            wpctl_shell_out = subprocess.run(["wpctl", "status"], stdout=subprocess.PIPE)
-            wpctl_string = wpctl_shell_out.stdout.decode("utf-8")
-
-            # find the line with spotify's stream id
-            for line in wpctl_string.split("\n"):
-                if "spotify" in line and not "pid:" in line:
-                    # remove whitespace before id and remove chars after id
-                    id = line[8:].split(".")[0]
-                    print(id)
-
-                    wpctl_shell_out1 = subprocess.run(["wpctl", "get-volume", id], stdout=subprocess.PIPE)
-                    spotify_volume = float(wpctl_shell_out1.stdout.decode("utf-8")[8:])*100
-                    print(f"Current spotify volume: {spotify_volume}")
-
-                    spotify_volume = spotify_volume + float(value)
-                    if spotify_volume > 100 or spotify_volume < 0:
-                        print("you idiot")
-                    else:
-                        feedback = subprocess.run(["wpctl", "set-volume", id, f"{str(spotify_volume)}%"], stdout=subprocess.PIPE)
-                        e = feedback.stdout.decode("utf-8")
-
-                        print(e)
-        # minecraft volume control
-        elif dial == 2:
-            
-            # run "wpctl status" and return its output
-            wpctl_shell_out = subprocess.run(["wpctl", "status"], stdout=subprocess.PIPE)
-            wpctl_string = wpctl_shell_out.stdout.decode("utf-8")
-            print(wpctl_string)
-
-            # find the line with minecraft's stream id
-            for line in wpctl_string.split("\n"):
-                if "java" in line and not "pid:" in line:
-                    # remove whitespace before id and remove chars after id
-                    id = line[8:].split(".")[0]
-                    print(id)
-
-                    wpctl_shell_out1 = subprocess.run(["wpctl", "get-volume", id], stdout=subprocess.PIPE)
-                    minecraft_volume = float(wpctl_shell_out1.stdout.decode("utf-8")[8:])*100
-                    print(f"Current minecraft volume: {minecraft_volume}")
-
-                    minecraft_volume = minecraft_volume + float(value)
-                    if minecraft_volume > 100 or minecraft_volume < 0:
-                        print("you idiot")
-                    else:
-                        feedback = subprocess.run(["wpctl", "set-volume", id, f"{str(minecraft_volume)}%"], stdout=subprocess.PIPE)
-                        e = feedback.stdout.decode("utf-8")
-
-                        print(e)
+        
             
 
-
+"""
+# don't need this for now
 # callback when lcd is touched
 def touchscreen_event_callback(deck, evt_type, value):
     if evt_type == TouchscreenEventType.SHORT:
@@ -189,7 +170,7 @@ def touchscreen_event_callback(deck, evt_type, value):
     elif evt_type == TouchscreenEventType.DRAG:
 
         print("Drag started @ " + str(value['x']) + "," + str(value['y']) + " ended @ " + str(value['x_out']) + "," + str(value['y_out']))
-
+"""
 
 if __name__ == "__main__":
     streamdecks = DeviceManager().enumerate()
@@ -197,24 +178,24 @@ if __name__ == "__main__":
     print("Found {} Stream Deck(s).\n".format(len(streamdecks)))
 
     for index, deck in enumerate(streamdecks):
-        # This example only works with devices that have screens.
 
         if deck.DECK_TYPE != 'Stream Deck +':
             print(deck.DECK_TYPE)
-            print("Sorry, this example only works with Stream Deck +")
+            print("Sorry, this script only works with Stream Deck +")
             continue
 
         deck.open()
         deck.reset()
 
-        deck.set_key_callback(key_change_callback)
         deck.set_dial_callback(dial_change_callback)
-        deck.set_touchscreen_callback(touchscreen_event_callback)
+        # don't need this for now
+        #deck.set_key_callback(key_change_callback)
+        #deck.set_touchscreen_callback(touchscreen_event_callback)
 
         print("Opened '{}' device (serial number: '{}')".format(deck.deck_type(), deck.get_serial_number()))
 
-        # Set initial screen brightness to 30%.
-        deck.set_brightness(100)
+        # Set initial screen brightness to 60%.
+        deck.set_brightness(60)
 
         for key in range(0, deck.KEY_COUNT):
             deck.set_key_image(key, img_released_bytes)
