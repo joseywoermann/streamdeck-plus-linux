@@ -31,25 +31,28 @@ dial_three_mute = False
 """
 
 # TODO: move this to a config.json
-program_zero = {
-    "name": "Spotify",
-    "id": "spotify"
-}
-
-programOne = {
-    "name": "Feishin",
-    "id": "Chromium"
-}
-
-programTwo = {
-    "name": "Minecraft",
-    "id": "java"
-}
-
-programThree = {
-    "name": "N/A",
-    "id": "n/a"
-}
+programs = [
+    {
+        "dial": 0,
+        "name": "Spotify",
+        "id": "spotify"
+    },
+    {
+        "dial": 1,
+        "name": "Feishin",
+        "id": "Chromium"
+    },
+    {
+        "dial": 2,
+        "name": "GTA V",
+        "id": "Grand Theft Auto V"
+    },
+    {
+        "dial": 3,
+        "name": "Minecraft",
+        "id": "java"
+    }
+]
 
 #
 # =======================================
@@ -119,39 +122,38 @@ def dial_change_callback(deck, dial, event, value):
         else:
             value = 2
 
+        dial_volume_control(dial, value)
 
-        # Volume control program zero
-        # TODO: break this out into a function that takes to dial number as a parameter and adjusts the volume of the corresponding program according to the dict above
-        if dial == 0:
+# Adjust the volume of the program mapped to the dial
+def dial_volume_control(dial, value):
+
+    # run "wpctl status" and return its output
+    wpctl_shell_out = subprocess.run(["wpctl", "status"], stdout=subprocess.PIPE)
+    wpctl_string = wpctl_shell_out.stdout.decode("utf-8")
+
+    # find the line with the program's id
+    for line in wpctl_string.split("\n"):
+        if programs[dial]["id"] in line and not "pid:" in line:
+
+            # extract the digits from the line
+            shell_list = list(line)
+            for i in shell_list:
+                if i == " ":
+                    shell_list.remove(i)
+            node_id = "".join(shell_list).split(".")[0]
+
+            # get current app volume
+            wpctl_shell_out1 = subprocess.run(["wpctl", "get-volume", node_id], stdout=subprocess.PIPE)
+            program_volume = float(wpctl_shell_out1.stdout.decode("utf-8")[8:])*100
             
-            # run "wpctl status" and return its output
-            wpctl_shell_out = subprocess.run(["wpctl", "status"], stdout=subprocess.PIPE)
-            wpctl_string = wpctl_shell_out.stdout.decode("utf-8")
-
-            # find the line with the program's id
-            for line in wpctl_string.split("\n"):
-                if program_zero["id"] in line and not "pid:" in line:
-
-                    # extract the digits from the line
-                    shell_list = list(line)
-                    for i in shell_list:
-                        if i == " ":
-                            shell_list.remove(i)
-                    node_id = "".join(shell_list).split(".")[0]
-
-                    # get current app volume
-                    wpctl_shell_out1 = subprocess.run(["wpctl", "get-volume", node_id], stdout=subprocess.PIPE)
-                    p_z_volume = float(wpctl_shell_out1.stdout.decode("utf-8")[8:])*100
-                    
-                    if p_z_volume + float(value) > 100: 
-                        print("Cannot set volume to higher than 100.")
-                    elif p_z_volume + float(value) < 0:
-                        print("Cannot set volume to below 0.")
-                    else:
-                        p_z_volume = p_z_volume + float(value)
-                        subprocess.run(["wpctl", "set-volume", node_id, f"{str(p_z_volume)}%"], stdout=subprocess.PIPE)
-                        print(f"Set {program_zero["name"]} volume to {p_z_volume}. [Pipewire Node ID: {node_id}]")
-
+            if program_volume + float(value) > 100: 
+                print("Cannot set volume to higher than 100.")
+            elif program_volume + float(value) < 0:
+                print("Cannot set volume to below 0.")
+            else:
+                program_volume = program_volume + float(value)
+                subprocess.run(["wpctl", "set-volume", node_id, f"{str(program_volume)}%"], stdout=subprocess.PIPE)
+                print(f"Set {programs[dial]["name"]} volume to {program_volume}. [Pipewire Node ID: {node_id}]")
 
         
             
@@ -192,7 +194,7 @@ if __name__ == "__main__":
         #deck.set_key_callback(key_change_callback)
         #deck.set_touchscreen_callback(touchscreen_event_callback)
 
-        print("Opened '{}' device (serial number: '{}')".format(deck.deck_type(), deck.get_serial_number()))
+        print(f"Opened '{deck.deck_type()}' device (serial number: '{deck.get_serial_number()}')")
 
         # Set initial screen brightness to 60%.
         deck.set_brightness(60)
