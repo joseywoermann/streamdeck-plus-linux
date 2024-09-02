@@ -4,11 +4,12 @@ import io
 
 from PIL import Image
 from StreamDeck.DeviceManager import DeviceManager
-from StreamDeck.Devices.StreamDeck import DialEventType, TouchscreenEventType
+from StreamDeck.Devices.StreamDeck import DialEventType
 
 import subprocess
 
-
+# Folder location of image assets used by this example.
+ASSETS_PATH = os.path.join(os.path.dirname(__file__), "Assets")
 
 # =======================================
 #
@@ -107,14 +108,24 @@ if __name__ == "__main__":
         deck.reset()
 
         deck.set_dial_callback(dial_change_callback)
-        # don't need this for now
-        #deck.set_key_callback(key_change_callback)
-        #deck.set_touchscreen_callback(touchscreen_event_callback)
 
-        print(f"Opened '{deck.deck_type()}' device (serial number: '{deck.get_serial_number()}')")
+        print(f"Opened {deck.deck_type()} | Serial number: '{deck.get_serial_number()}')")
 
         # Set initial screen brightness to 60%.
         deck.set_brightness(60)
+
+
+      
+        # build an image for the touch lcd
+        img = Image.new('RGB', (800, 100), 'black')
+        icon = Image.open(os.path.join(ASSETS_PATH, 'touch_bg.png')).resize((800, 100))
+        img.paste(icon, (0, 0), icon)
+
+        img_bytes = io.BytesIO()
+        img.save(img_bytes, format='JPEG')
+        touchscreen_image_bytes = img_bytes.getvalue()
+
+        deck.set_touchscreen_image(touchscreen_image_bytes, 0, 0, 800, 100)
 
         # Wait until all application threads have terminated (for this example,
         # this is when all deck handles are closed).
