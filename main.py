@@ -14,7 +14,7 @@ ASSETS_PATH = os.path.join(os.path.dirname(__file__), "Assets")
 # =======================================
 #
 # TODO: move this to a config.json
-programs = [
+apps: list[dict[str, (str | int)]] = [
     {
         "dial": 0,
         "name": "Spotify",
@@ -48,24 +48,12 @@ def dial_change_callback(deck, dial, event, value):
     if event == DialEventType.PUSH:
 
         if value:
-            # run "wpctl status" and return its output
-            wpctl_shell_out = subprocess.run(["wpctl", "status"], stdout=subprocess.PIPE)
-            wpctl_string = wpctl_shell_out.stdout.decode("utf-8")
+            # toggle mute state
+            pw_id = get_pw_id(apps[dial]["id"])
 
-            # find the line with the program's id
-            for line in wpctl_string.split("\n"):
-                if programs[dial]["id"] in line and not "pid:" in line:
-
-                    # extract the digits from the line
-                    shell_list = list(line)
-                    for i in shell_list:
-                        if i == " ":
-                            shell_list.remove(i)
-                    node_id = "".join(shell_list).split(".")[0]
-
-                    # toggle mute state
-                    subprocess.run(["wpctl", "set-mute", node_id, "toggle"], stdout=subprocess.PIPE)
-                    print(f"Toggled {programs[dial]["name"]}'s mute state. [Pipewire Node ID: {node_id}]")
+            if pw_id is not None:
+                subprocess.run(["wpctl", "set-mute", pw_id, "toggle"], stdout=subprocess.PIPE)
+                print(f"Toggled {apps[dial]["name"]}'s mute state. [Pipewire Node ID: {pw_id}]")
 
 
     # Application vlume control +/-
@@ -77,33 +65,23 @@ def dial_change_callback(deck, dial, event, value):
         else:
             value = 2
 
-        # run "wpctl status" and return its output
-        wpctl_shell_out = subprocess.run(["wpctl", "status"], stdout=subprocess.PIPE)
-        wpctl_string = wpctl_shell_out.stdout.decode("utf-8")
 
-        # find the line with the program's id
-        for line in wpctl_string.split("\n"):
-            if programs[dial]["id"] in line and not "pid:" in line:
+        pw_id = get_pw_id(apps[dial]["id"])
 
-                # extract the digits from the line
-                shell_list = list(line)
-                for i in shell_list:
-                    if i == " ":
-                        shell_list.remove(i)
-                node_id = "".join(shell_list).split(".")[0]
-
-                # get current app volume
-                wpctl_shell_out1 = subprocess.run(["wpctl", "get-volume", node_id], stdout=subprocess.PIPE)
-                program_volume = float(wpctl_shell_out1.stdout.decode("utf-8")[8:])*100
-                
-                if program_volume + float(value) > 100: 
-                    print("Cannot set volume to higher than 100.")
-                elif program_volume + float(value) < 0:
-                    print("Cannot set volume to below 0.")
-                else:
-                    program_volume = program_volume + float(value)
-                    subprocess.run(["wpctl", "set-volume", node_id, f"{str(program_volume)}%"], stdout=subprocess.PIPE)
-                    print(f"Set {programs[dial]["name"]} volume to {program_volume}. [Pipewire Node ID: {node_id}]")
+        if pw_id is not None:
+            # get current app volume
+            wpctl_result = subprocess.run(["wpctl", "get-volume", pw_id], stdout=subprocess.PIPE)
+            # This part `.split(" [")[0]` is here because if an app is muted, '0.36' becomes '0.36 [MUTED]\n'. This cannot be converted into a float. 
+            app_volume = float(wpctl_result.stdout.decode("utf-8")[8:].split(" [")[0])*100
+            
+            if app_volume + float(value) > 100: 
+                print("Cannot set volume to higher than 100.")
+            elif app_volume + float(value) < 0:
+                print("Cannot set volume to below 0.")
+            else:
+                app_volume = app_volume + float(value)
+                subprocess.run(["wpctl", "set-volume", pw_id, f"{str(app_volume)}%"], stdout=subprocess.PIPE)
+                print(f"Set {apps[dial]["name"]} volume to {app_volume}. [Pipewire Node ID: {pw_id}]")
 
 
 def key_change_callback(deck, key, state):
@@ -118,6 +96,26 @@ def key_change_callback(deck, key, state):
             # reset deck and wuit script
             deck.reset()
             deck.close()
+
+
+# Takes an app name (e.g. "spotify") and returns the corresponding Pipewire Stream / Source / Sink ID. If the app doesn't have a stream registered, this function returns `None`.
+def get_pw_id(app_id: str) -> (str | None):
+    # run "wpctl status" and return its output
+    wpctl_result = subprocess.run(["wpctl", "status"], stdout=subprocess.PIPE)
+    wpctl_data = wpctl_result.stdout.decode("utf-8")
+
+    # find the line with the program's id
+    for line in wpctl_data.split("\n"):
+        if app_id in line and not "pid:" in line:
+
+            # extract the digits from the line
+            shell_list = list(line)
+            for i in shell_list:
+                if i == " ":
+                    shell_list.remove(i)
+            pw_id = "".join(shell_list).split(".")[0]
+            return pw_id
+
 
 
 if __name__ == "__main__":
