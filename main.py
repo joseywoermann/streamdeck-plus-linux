@@ -27,13 +27,13 @@ programs = [
     },
     {
         "dial": 2,
-        "name": "GTA V",
-        "id": "Grand Theft Auto V"
+        "name": "Rocket League",
+        "id": "Rocket League"
     },
     {
         "dial": 3,
-        "name": "Minecraft",
-        "id": "java"
+        "name": "Firefox",
+        "id": "Firefox"
     }
 ]
 
@@ -43,15 +43,33 @@ programs = [
 
 # callback when dials are pressed or released
 def dial_change_callback(deck, dial, event, value):
+
+    # Application mute
     if event == DialEventType.PUSH:
-        print(f"dial pushed: {dial} state: {value}")
 
-        if dial == 3 and value:
-            deck.reset()
-            deck.close()
+        if value:
+            # run "wpctl status" and return its output
+            wpctl_shell_out = subprocess.run(["wpctl", "status"], stdout=subprocess.PIPE)
+            wpctl_string = wpctl_shell_out.stdout.decode("utf-8")
 
+            # find the line with the program's id
+            for line in wpctl_string.split("\n"):
+                if programs[dial]["id"] in line and not "pid:" in line:
+
+                    # extract the digits from the line
+                    shell_list = list(line)
+                    for i in shell_list:
+                        if i == " ":
+                            shell_list.remove(i)
+                    node_id = "".join(shell_list).split(".")[0]
+
+                    # toggle mute state
+                    subprocess.run(["wpctl", "set-mute", node_id, "toggle"], stdout=subprocess.PIPE)
+                    print(f"Toggled {programs[dial]["name"]}'s mute state. [Pipewire Node ID: {node_id}]")
+
+
+    # Application vlume control +/-
     elif event == DialEventType.TURN:
-        #print(f"dial {dial} turned: {value}")
 
         # change volume by +/-2% at a time
         if value < 0:
@@ -59,38 +77,48 @@ def dial_change_callback(deck, dial, event, value):
         else:
             value = 2
 
-        dial_volume_control(dial, value)
+        # run "wpctl status" and return its output
+        wpctl_shell_out = subprocess.run(["wpctl", "status"], stdout=subprocess.PIPE)
+        wpctl_string = wpctl_shell_out.stdout.decode("utf-8")
 
-# Adjust the volume of the program mapped to the dial
-def dial_volume_control(dial, value):
+        # find the line with the program's id
+        for line in wpctl_string.split("\n"):
+            if programs[dial]["id"] in line and not "pid:" in line:
 
-    # run "wpctl status" and return its output
-    wpctl_shell_out = subprocess.run(["wpctl", "status"], stdout=subprocess.PIPE)
-    wpctl_string = wpctl_shell_out.stdout.decode("utf-8")
+                # extract the digits from the line
+                shell_list = list(line)
+                for i in shell_list:
+                    if i == " ":
+                        shell_list.remove(i)
+                node_id = "".join(shell_list).split(".")[0]
 
-    # find the line with the program's id
-    for line in wpctl_string.split("\n"):
-        if programs[dial]["id"] in line and not "pid:" in line:
+                # get current app volume
+                wpctl_shell_out1 = subprocess.run(["wpctl", "get-volume", node_id], stdout=subprocess.PIPE)
+                program_volume = float(wpctl_shell_out1.stdout.decode("utf-8")[8:])*100
+                
+                if program_volume + float(value) > 100: 
+                    print("Cannot set volume to higher than 100.")
+                elif program_volume + float(value) < 0:
+                    print("Cannot set volume to below 0.")
+                else:
+                    program_volume = program_volume + float(value)
+                    subprocess.run(["wpctl", "set-volume", node_id, f"{str(program_volume)}%"], stdout=subprocess.PIPE)
+                    print(f"Set {programs[dial]["name"]} volume to {program_volume}. [Pipewire Node ID: {node_id}]")
 
-            # extract the digits from the line
-            shell_list = list(line)
-            for i in shell_list:
-                if i == " ":
-                    shell_list.remove(i)
-            node_id = "".join(shell_list).split(".")[0]
 
-            # get current app volume
-            wpctl_shell_out1 = subprocess.run(["wpctl", "get-volume", node_id], stdout=subprocess.PIPE)
-            program_volume = float(wpctl_shell_out1.stdout.decode("utf-8")[8:])*100
-            
-            if program_volume + float(value) > 100: 
-                print("Cannot set volume to higher than 100.")
-            elif program_volume + float(value) < 0:
-                print("Cannot set volume to below 0.")
-            else:
-                program_volume = program_volume + float(value)
-                subprocess.run(["wpctl", "set-volume", node_id, f"{str(program_volume)}%"], stdout=subprocess.PIPE)
-                print(f"Set {programs[dial]["name"]} volume to {program_volume}. [Pipewire Node ID: {node_id}]")
+def key_change_callback(deck, key, state):
+
+    if state:
+        if key == 0:
+            # Mute default microphone
+            # Run wpctl set-mute @DEFAULT_AUDIO_SOURCE@ toggle
+            subprocess.run(["wpctl", "set-mute", "@DEFAULT_AUDIO_SOURCE@", "toggle"], stdout=subprocess.PIPE)
+
+        elif key == 7:
+            # reset deck and wuit script
+            deck.reset()
+            deck.close()
+
 
 if __name__ == "__main__":
     streamdecks = DeviceManager().enumerate()
@@ -107,7 +135,9 @@ if __name__ == "__main__":
         deck.open()
         deck.reset()
 
+        # register callback functions
         deck.set_dial_callback(dial_change_callback)
+        deck.set_key_callback(key_change_callback)
 
         print(f"Opened {deck.deck_type()} | Serial number: '{deck.get_serial_number()}')")
 
